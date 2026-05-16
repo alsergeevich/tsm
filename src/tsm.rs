@@ -130,5 +130,12 @@ impl TSM {
     pub fn get_ambient_temp(&self) -> f32 {
         self.ambient_temperature
     }
+
+    /// Возвращает ошибку (смещение), которую вносят провода в показания температуры (°C)
+    pub fn get_wire_error_celsius(&self) -> f32 {
+        let r_wires = self.get_resistance_wires();
+        let sensitivity = self.r0 * constants::ALPHA;
+        r_wires / sensitivity
+    }
     
 }
