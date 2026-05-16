@@ -67,11 +67,11 @@ impl TSM {
             ambient_temperature: 0.0,
         }
     }
-    
+    // Преобразование температуры в сопротивление
     fn temperature_to_resistance(&self) -> f32 {
         self.r0 * (1.0 + constants::ALPHA * self.sensor_temperature)
     }
-
+    // Установка температуры окружающей среды
     pub fn set_temperature_environment(&mut self, temperature: f32) {
         if temperature < self.t_min || temperature > self.t_max {
             panic!("Temperature {} is out of range [{}, {}]", temperature, self.t_min, self.t_max);
@@ -87,6 +87,7 @@ impl TSM {
         self.sensor_temperature += delta;
     }
 
+    // Получение погрешности датчика в градусах
     fn get_error(&self) -> f32 {
         let t = self.sensor_temperature.abs();
         match self.class {
@@ -118,15 +119,18 @@ impl TSM {
         
         r_ideal + gauss_noise(sigma_r) + self.get_resistance_wires()
     }
-
+    
+    // Получение температуры из сопротивления
     pub fn get_temperature(&self) -> f32 {
         (self.get_resistance() / self.r0 - 1.0) / constants::ALPHA
     }
 
+    // Получение температуры самого датчика
     pub fn get_sensor_temp(&self) -> f32 {
         self.sensor_temperature
     }
 
+    // Получение температуры окружающей среды
     pub fn get_ambient_temp(&self) -> f32 {
         self.ambient_temperature
     }

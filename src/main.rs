@@ -4,7 +4,7 @@ use tsm::{TSM, Class, NumbersOfWire};
 fn main() {
     // Создаем датчик: 50 Ом, класс B, 2 провода (длина 5м, сечение 0.75мм2), tau = 15 сек
     let mut sensor = TSM::new(
-        50.0, 
+        100.0, 
         -50.0, 
         200.0, 
         Class::ClassB, 
