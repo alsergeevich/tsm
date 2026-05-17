@@ -1,4 +1,4 @@
-
+#![allow(non_camel_case_types)]
 use rand::random_range;
 
 
@@ -24,7 +24,8 @@ pub enum NumbersOfWire {
 /// Тип датчика
 pub enum TypeSensor {
     Type50M,
-    Type100M,
+    Type100M_426,
+    Type100M_428,
 }
 
 
@@ -81,7 +82,24 @@ impl TSM {
     fn calculate_alpha(&self) -> f32 {
         match self.sensor_type {
             TypeSensor::Type50M => 0.00428,
-            TypeSensor::Type100M => 0.00426,
+            TypeSensor::Type100M_426 => 0.00426,
+            TypeSensor::Type100M_428 => 0.00428,
+        }
+    }
+
+    /// Получение коэффициента B
+    fn calculate_b(&self) -> f32 {
+        match self.sensor_type {
+            TypeSensor::Type50M | TypeSensor::Type100M_428 => -6.2032e-7,
+            TypeSensor::Type100M_426 => 0.0,
+        }
+    }
+
+    /// Получение коэффициента C
+    fn calculate_c(&self) -> f32 {
+        match self.sensor_type {
+            TypeSensor::Type50M | TypeSensor::Type100M_428 => 8.5154e-10,
+            TypeSensor::Type100M_426 => 0.0,
         }
     }
 
@@ -89,14 +107,29 @@ impl TSM {
     fn get_r0(&self) -> f32 {
         match self.sensor_type {
             TypeSensor::Type50M => 50.0,
-            TypeSensor::Type100M => 100.0,
+            TypeSensor::Type100M_426 => 100.0,
+            TypeSensor::Type100M_428 => 100.0,
         }
     }
 
 
-    // Преобразование температуры в сопротивление
+    /// Расчет идеального сопротивления по НСХ (ГОСТ) для заданной температуры (без учета погрешностей)
+    fn calc_ideal_resistance(&self, t: f32) -> f32 {
+        let r0 = self.get_r0();
+        let a = self.calculate_alpha();
+        
+        if t >= 0.0 {
+            r0 * (1.0 + a * t)
+        } else {
+            let b = self.calculate_b();
+            let c = self.calculate_c();
+            r0 * (1.0 + a * t + b * t * (t + 6.7) + c * t.powi(3))
+        }
+    }
+
+    /// Преобразование текущей температуры датчика в идеальное сопротивление
     fn temperature_to_resistance(&self) -> f32 {
-        self.get_r0() * (1.0 + self.calculate_alpha() * self.sensor_temperature)
+        self.calc_ideal_resistance(self.sensor_temperature)
     }
     // Установка температуры окружающей среды
     pub fn set_temperature_environment(&mut self, temperature: f32) {
@@ -139,7 +172,7 @@ impl TSM {
     }
 
     /// Получение сопротивления датчика с учетом погрешностей
-    fn get_resistance(&self) -> f32 {
+    pub fn get_out_resistance_sensor(&self) -> f32 {
         let r_ideal = self.temperature_to_resistance();
         // Переводим погрешность из градусов в Омы ( sigma_R = delta_T * S )
         let sensitivity = self.get_r0() * self.calculate_alpha();
@@ -148,9 +181,34 @@ impl TSM {
         r_ideal + gauss_noise(sigma_r) + self.get_resistance_wires()
     }
     
-    /// Получение температуры из сопротивления
+    /// Получение температуры из сопротивления (Эмуляция измерительного прибора/ПЛК)
+    /// Использует метод бисекции для расчета температуры по "грязному" сопротивлению
     pub fn get_out_sensor_temperature(&self) -> f32 {
-        (self.get_resistance() / self.get_r0() - 1.0) / self.calculate_alpha()
+        let r_target = self.get_out_resistance_sensor();
+        let r0 = self.get_r0();
+        let a = self.calculate_alpha();
+
+        if r_target >= r0 {
+            // Линейный участок (t >= 0): точная обратная формула
+            (r_target / r0 - 1.0) / a
+        } else {
+            // Нелинейный участок (t < 0): поиск корня методом половинного деления (бисекция)
+            let mut left = -300.0; // Гарантированно ниже минимальной температуры
+            let mut right = 0.0;   // Верхняя граница нелинейного участка
+            
+            // 50 итераций дадут колоссальную точность, достаточную для любого АЦП
+            for _ in 0..50 {
+                let mid = (left + right) / 2.0;
+                let r_mid = self.calc_ideal_resistance(mid);
+                
+                if r_mid < r_target {
+                    left = mid; // Искомая температура выше (ближе к нулю)
+                } else {
+                    right = mid; // Искомая температура ниже
+                }
+            }
+            (left + right) / 2.0
+        }
     }
 
     /// Получение температуры самого датчика

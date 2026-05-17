@@ -5,31 +5,32 @@ fn main() {
     // Создаем датчик: 50 Ом, класс B, 2 провода (длина 5м, сечение 0.75мм2), tau = 15 сек
     let mut sensor = TSM::new(
         TypeSensor::Type50M, 
-        -50.0, 
+        -200.0, 
         200.0, 
         Class::ClassB, 
-        NumbersOfWire::Wire3, 
+        NumbersOfWire::Wire2, 
         5.0,  // длина
         0.25, // сечение
         20.0
     );
 
-    println!("Симуляция: Нагрев среды с 0°C до 100°C");
-    sensor.set_temperature_environment(100.0);
+    println!("Симуляция: Охлаждение среды с 0°C до -100°C");
+    sensor.set_temperature_environment(-100.0);
 
     let dt = 1.0; // Шаг 1 секунда
-    println!("{:<10} | {:<15} | {:<15} | {:<15}", "Время (с)", "Реальная Т", "Показания", "Ошибка провода");
-    println!("{:-<65}", "");
+    println!("{:<10} | {:<15} | {:<15} | {:<15} | {:<15}", "Время (с)", "Реальная Т", "Показания Т", "Сырое R (Ом)", "Ошибка провода");
+    println!("{:-<80}", "");
 
     let wire_error = sensor.get_wire_error_celsius();
 
     for t in 0..=60 {
         if t % 10 == 0 {
             println!(
-                "{:<10} | {:<15.2} | {:<15.2} | {:<15.2}", 
+                "{:<10} | {:<15.2} | {:<15.2} | {:<15.2} | {:<15.2}", 
                 t, 
                 sensor.get_real_sensor_temperature(), 
                 sensor.get_out_sensor_temperature(),
+                sensor.get_out_resistance_sensor(),
                 wire_error
             );
         }
