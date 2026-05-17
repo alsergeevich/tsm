@@ -3,28 +3,36 @@ use rand::random_range;
 
 
 mod constants {
-    
-    pub const ALPHA : f32 = 0.00428;
-    pub const RHO_COPPER : f32 = 0.0175; // Ом * мм^2 / м
-
+    /// Удельное электрическое сопротивление меди: Ом * мм^2 / м
+    pub const RHO_COPPER : f32 = 0.0175; 
 }
 
+/// Класс точности датчика
 pub enum Class {
     ClassA,
     ClassB,
     ClassC,
 }
 
+/// Количество проводов
 pub enum NumbersOfWire {
     Wire2,
     Wire3,
     Wire4,
 }
 
+/// Тип датчика
+pub enum TypeSensor {
+    Type50M,
+    Type100M,
+}
 
 
 
 
+
+/// Генерация случайного числа по Гауссу для имитации погрешностей измерения
+/// шума датчика
 fn gauss_noise(sigma : f32) -> f32 {
     let mut u1: f32 = random_range(0.0..=1.0);
     // Защита от логарифма нуля: u1 должен быть в диапазоне (0, 1]
@@ -37,9 +45,9 @@ fn gauss_noise(sigma : f32) -> f32 {
 }
 
 
-
+/// Структура датчика температуры
 pub struct TSM {
-    r0: f32,
+    sensor_type: TypeSensor,
     t_min: f32,
     t_max: f32,
     class: Class,
@@ -53,9 +61,10 @@ pub struct TSM {
 
 impl TSM {
 
-    pub fn new(r0: f32, t_min: f32, t_max: f32, class: Class, num_of_wire: NumbersOfWire, wire_length: f32, wire_cross_section: f32, tau: f32) -> TSM {
+    /// Создание нового датчика
+    pub fn new(sensor_type: TypeSensor, t_min: f32, t_max: f32, class: Class, num_of_wire: NumbersOfWire, wire_length: f32, wire_cross_section: f32, tau: f32) -> TSM {
         TSM {
-            r0,
+            sensor_type,
             t_min,
             t_max,
             class,
@@ -67,9 +76,27 @@ impl TSM {
             ambient_temperature: 0.0,
         }
     }
+
+    /// Получение температурного коэффициента
+    fn calculate_alpha(&self) -> f32 {
+        match self.sensor_type {
+            TypeSensor::Type50M => 0.00428,
+            TypeSensor::Type100M => 0.00426,
+        }
+    }
+
+    /// Получение номинального сопротивления датчика
+    fn get_r0(&self) -> f32 {
+        match self.sensor_type {
+            TypeSensor::Type50M => 50.0,
+            TypeSensor::Type100M => 100.0,
+        }
+    }
+
+
     // Преобразование температуры в сопротивление
     fn temperature_to_resistance(&self) -> f32 {
-        self.r0 * (1.0 + constants::ALPHA * self.sensor_temperature)
+        self.get_r0() * (1.0 + self.calculate_alpha() * self.sensor_temperature)
     }
     // Установка температуры окружающей среды
     pub fn set_temperature_environment(&mut self, temperature: f32) {
@@ -87,7 +114,7 @@ impl TSM {
         self.sensor_temperature += delta;
     }
 
-    // Получение погрешности датчика в градусах
+    /// Получение погрешности датчика в градусах
     fn get_error(&self) -> f32 {
         let t = self.sensor_temperature.abs();
         match self.class {
@@ -96,7 +123,7 @@ impl TSM {
             Class::ClassC => 0.6 + 0.01 * t,
         }
     }
-
+    /// Получение сопротивления проводов
     fn get_resistance_wires(&self) -> f32 {
         let r_one_wire = self.calculate_wire_resistance();
         match self.num_of_wire {
@@ -111,35 +138,40 @@ impl TSM {
         constants::RHO_COPPER * (self.wire_length / self.wire_cross_section)
     }
 
+    /// Получение сопротивления датчика с учетом погрешностей
     fn get_resistance(&self) -> f32 {
         let r_ideal = self.temperature_to_resistance();
         // Переводим погрешность из градусов в Омы ( sigma_R = delta_T * S )
-        let sensitivity = self.r0 * constants::ALPHA;
+        let sensitivity = self.get_r0() * self.calculate_alpha();
         let sigma_r = self.get_error() * sensitivity;
         
         r_ideal + gauss_noise(sigma_r) + self.get_resistance_wires()
     }
     
-    // Получение температуры из сопротивления
-    pub fn get_temperature(&self) -> f32 {
-        (self.get_resistance() / self.r0 - 1.0) / constants::ALPHA
+    /// Получение температуры из сопротивления
+    pub fn get_out_sensor_temperature(&self) -> f32 {
+        (self.get_resistance() / self.get_r0() - 1.0) / self.calculate_alpha()
     }
 
-    // Получение температуры самого датчика
-    pub fn get_sensor_temp(&self) -> f32 {
+    /// Получение температуры самого датчика
+    pub fn get_real_sensor_temperature(&self) -> f32 {
         self.sensor_temperature
     }
 
-    // Получение температуры окружающей среды
-    pub fn get_ambient_temp(&self) -> f32 {
+    /// Получение температуры окружающей среды
+    pub fn get_ambient_temperature(&self) -> f32 {
         self.ambient_temperature
     }
 
     /// Возвращает ошибку (смещение), которую вносят провода в показания температуры (°C)
     pub fn get_wire_error_celsius(&self) -> f32 {
         let r_wires = self.get_resistance_wires();
-        let sensitivity = self.r0 * constants::ALPHA;
-        r_wires / sensitivity
+        let sensitivity = self.get_r0() * self.calculate_alpha();
+        if sensitivity == 0.0 {
+            0.0
+        } else {
+            r_wires / sensitivity
+        }
     }
     
 }

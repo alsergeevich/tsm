@@ -1,14 +1,14 @@
 pub mod tsm;
-use tsm::{TSM, Class, NumbersOfWire};
+use tsm::{TSM, Class, NumbersOfWire, TypeSensor};
 
 fn main() {
     // Создаем датчик: 50 Ом, класс B, 2 провода (длина 5м, сечение 0.75мм2), tau = 15 сек
     let mut sensor = TSM::new(
-        100.0, 
+        TypeSensor::Type50M, 
         -50.0, 
         200.0, 
         Class::ClassB, 
-        NumbersOfWire::Wire2, 
+        NumbersOfWire::Wire3, 
         5.0,  // длина
         0.25, // сечение
         20.0
@@ -28,8 +28,8 @@ fn main() {
             println!(
                 "{:<10} | {:<15.2} | {:<15.2} | {:<15.2}", 
                 t, 
-                sensor.get_sensor_temp(), 
-                sensor.get_temperature(),
+                sensor.get_real_sensor_temperature(), 
+                sensor.get_out_sensor_temperature(),
                 wire_error
             );
         }
