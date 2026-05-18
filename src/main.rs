@@ -1,45 +1,64 @@
-pub mod tsm;
-use tsm::{TSM, Class, NumbersOfWire, TypeSensor};
+pub mod types;
+pub mod wire;
+pub mod meter;
+pub mod rtd;
+
+use types::{Class, TypeSensor};
+use wire::{Wire, NumbersOfWire};
+use meter::Meter;
+use rtd::RTD;
 
 fn main() {
-    // Создаем датчик: 50 Ом, класс B, 2 провода (длина 5м, сечение 0.75мм2), tau = 15 сек
-    let mut sensor = TSM::new(
-        TypeSensor::Type50M, 
+    let sensor_type = TypeSensor::TypePt1000;
+
+    // 1. Создаем чистый датчик
+    let mut sensor = RTD::new(
+        sensor_type, 
         -200.0, 
         200.0, 
         Class::ClassB, 
-        NumbersOfWire::Wire2, 
-        5.0,  // длина
-        0.25, // сечение
-        20.0
+        40.0 // tau
     );
 
-    println!("Симуляция: Охлаждение среды с 0°C до -100°C");
-    sensor.set_temperature_environment(-100.0);
+    // 2. Создаем линию связи (кабель 5м, сечение 0.75мм2, 2 провода)
+    let cable = Wire::new(1.0, 0.75, NumbersOfWire::Wire2);
+
+    // 3. Создаем измерительный прибор (настроен на тот же тип датчика)
+    let plc = Meter::new(sensor_type);
+
+    println!("Симуляция: Нагрев среды с 0°C до 100°C");
+    sensor.set_temperature_environment(100.0);
 
     let dt = 1.0; // Шаг 1 секунда
-    println!("{:<10} | {:<15} | {:<15} | {:<15} | {:<15}", "Время (с)", "Реальная Т", "Показания Т", "Сырое R (Ом)", "Ошибка провода");
+    println!("{:<10} | {:<15} | {:<15} | {:<15} | {:<15}", "Время (с)", "Реальная Т", "Показания ПЛК", "Сырое R (Ом)", "R проводов");
     println!("{:-<80}", "");
 
-    let wire_error = sensor.get_wire_error_celsius();
+    let r_wires = cable.get_resistance_wires();
 
     for t in 0..=60 {
-        if t % 10 == 0 {
+        if t % 1 == 0 {
+            // Читаем физическое сопротивление с клемм датчика
+            let r_sensor = sensor.get_out_resistance_sensor();
+            
+            // Пропускаем сигнал через кабель
+            let r_input_plc = cable.transmit(r_sensor);
+
+            // ПЛК вычисляет температуру
+            let t_measured = plc.measure(r_input_plc);
+
             println!(
                 "{:<10} | {:<15.2} | {:<15.2} | {:<15.2} | {:<15.2}", 
                 t, 
                 sensor.get_real_sensor_temperature(), 
-                sensor.get_out_sensor_temperature(),
-                sensor.get_out_resistance_sensor(),
-                wire_error
+                t_measured,
+                r_input_plc,
+                r_wires
             );
         }
         sensor.tick(dt);
     }
 
     println!("\nАНАЛИЗ:");
-    println!("1. При 2-х проводной схеме провода добавляют фиксированное смещение: {:.2}°C", wire_error);
-    println!("2. Если заменить 50М на 100М, эта ошибка уменьшится в 2 раза.");
-    println!("3. Если сменить схему на 3-х проводную, ошибка станет 0.00°C.");
-
+    println!("1. Сопротивление проводов: {:.2} Ом", r_wires);
+    println!("2. Мы построили полноценный цифровой двойник (Digital Twin) измерительного канала!");
 }
