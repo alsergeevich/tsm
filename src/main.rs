@@ -2,6 +2,7 @@ pub mod types;
 pub mod wire;
 pub mod meter;
 pub mod rtd;
+pub mod analog_scaling_converter;
 
 use types::{Class, TypeSensor};
 use wire::{Wire, NumbersOfWire};
