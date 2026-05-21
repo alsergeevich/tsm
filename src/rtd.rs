@@ -64,8 +64,8 @@ impl RTD {
         self.sensor_temperature += delta;
     }
 
-    /// Получение погрешности датчика в градусах
-    fn get_error(&self) -> f32 {
+    /// Получение максимально допустимой погрешности по ГОСТ в градусах
+    pub fn get_error(&self) -> f32 {
         let t = self.sensor_temperature.abs();
         match self.class {
             Class::ClassA => 0.15 + 0.002 * t,
@@ -76,20 +76,23 @@ impl RTD {
 
     /// Получение выходного сопротивления датчика (идеальное + заводская погрешность + динамический шум)
     pub fn get_out_resistance_sensor(&self) -> f32 {
+        let t = self.sensor_temperature;
         let r_ideal = self.temperature_to_resistance();
         
-        // Чувствительность датчика (Ом / °C). Используем calculate_a, так как это средний наклон
-        let sensitivity = self.sensor_type.get_r0() * self.sensor_type.calculate_a();
-        
         // 1. Систематическая погрешность (Класс точности ГОСТ)
-        // Это смещение постоянно для данного экземпляра датчика
         let max_error_celsius = self.get_error();
-        let sys_error_r = max_error_celsius * sensitivity * self.systematic_offset;
+        // Точно вычисляем, на сколько ОМ изменяется сопротивление при отклонении
+        // на величину max_error_celsius именно в текущей рабочей точке (с учетом нелинейности)
+        let r_with_error = self.sensor_type.calc_ideal_resistance(t + max_error_celsius);
+        let max_sys_error_r = r_with_error - r_ideal;
+        let sys_error_r = max_sys_error_r * self.systematic_offset;
         
         // 2. Динамический шум (наводки, тепловой шум)
         // В реальности он очень мал. Возьмем, например, 3-сигма равным 0.05 °C
         let dynamic_noise_celsius = 0.05;
-        let sigma_noise_r = (dynamic_noise_celsius * sensitivity) / 3.0; 
+        // Переводим шум из градусов в Омы в текущей рабочей точке
+        let r_noise_bound = self.sensor_type.calc_ideal_resistance(t + dynamic_noise_celsius) - r_ideal;
+        let sigma_noise_r = r_noise_bound / 3.0; 
         
         r_ideal + sys_error_r + gauss_noise(sigma_noise_r)
     }
