@@ -6,7 +6,8 @@ pub mod meter;
 pub mod rtd;
 pub mod analog_scaling_converter;
 pub mod thermal_process_simulator;
-
+pub mod pid;
+ 
 use types::{Class, TypeSensor};
 use rtd::RTD;
 use meter::Meter;
