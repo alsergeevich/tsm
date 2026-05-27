@@ -9,3 +9,6 @@ src/RESPONSE_RULES.md
 .kilo/skills/agent-md-refactor/README.md
 .kilo/skills/agent-md-refactor/SKILL.md
 .kilo/skills/agent-md-refactor/local.patch
+.kilo/rules/fastapi.md
+.kilo/rules/CLAUDE.md
+.kilo/plans/1779904138492-glowing-orchid.md
