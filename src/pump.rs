@@ -35,6 +35,8 @@ impl FluidType {
 /// Точка режима работы насоса (результат расчета модели).
 #[derive(Debug, Clone)]
 pub struct PumpOperatingPoint {
+    /// Давление на входе, МПа
+    pub inlet_pressure_mpa: f64,
     /// Фактический расход, м³/ч
     pub flow_rate_m3h: f64,
     /// Фактический напор, м
@@ -55,6 +57,8 @@ pub struct PumpOperatingPoint {
     pub inlet_velocity_ms: f64,
     /// Скорость потока в выходном патрубке, м/с
     pub outlet_velocity_ms: f64,
+    /// Давление на выходе, МПа
+    pub outlet_pressure_mpa: f64,
 }
 
 /// Математическая модель центробежного насоса.
@@ -64,7 +68,6 @@ pub struct Pump {
     // --- ПАСПОРТНЫЕ ХАРАКТЕРИСТИКИ НАСОСА ---
     nominal_din_mm: f64,             // Диаметр входного патрубка, мм
     nominal_dout_mm: f64,            // Диаметр выходного патрубка, мм
-    nominal_pin_mpa: f64,            // Номинальное давление на входе, МПа
     nominal_flow_rate_m3h: f64,      // Номинальный расход (точка BEP - Best Efficiency Point), м³/ч
     nominal_h_m: f64,                // Номинальный напор при номинальном расходе, м
     electric_motor_power_kw: f64,    // Паспортная мощность установленного двигателя, кВт
@@ -83,7 +86,6 @@ impl Default for Pump {
         Self {
             nominal_din_mm: 50.0,
             nominal_dout_mm: 32.0,
-            nominal_pin_mpa: 0.35,            // 0.1 МПа ≈ 1 бар (атмосферное давление на входе)
             nominal_flow_rate_m3h: 12.5,
             nominal_h_m: 20.0,
             electric_motor_power_kw: 1.6,
@@ -110,7 +112,6 @@ impl Pump {
         Self {
             nominal_din_mm,
             nominal_dout_mm,
-            nominal_pin_mpa,
             nominal_flow_rate_m3h,
             nominal_h_m,
             electric_motor_power_kw,
@@ -203,6 +204,8 @@ impl Pump {
         let area_m2 = std::f64::consts::PI * (self.nominal_dout_mm / 2000.0).powi(2);
         flow_m3s / area_m2
     }
+    
+    
 
     /// Расчет поправочных коэффициентов на вязкость по стандарту ANSI/HI 9.6.7.
     /// Возвращает пару (C_q, C_h) — коэффициенты снижения расхода и напора.
@@ -280,6 +283,7 @@ impl Pump {
         
         if !self.is_started || self.current_rotation_speed_rpm < MIN_OPERATING_SPEED_RPM {
             return PumpOperatingPoint {
+                inlet_pressure_mpa: 0.0,
                 flow_rate_m3h: 0.0,
                 head_m: 0.0,
                 shaft_power_kw: 0.0,
@@ -290,6 +294,7 @@ impl Pump {
                 npsh_required_m: 0.0,
                 inlet_velocity_ms: 0.0,
                 outlet_velocity_ms: 0.0,
+                outlet_pressure_mpa: 0.0,
             };
         }
 
@@ -344,9 +349,13 @@ impl Pump {
         let npsh_required = self.calculate_npsh_required(current_flow);
         let inlet_velocity = self.calculate_inlet_velocity_ms(current_flow);
         let outlet_velocity = self.calculate_outlet_velocity_ms(current_flow);
-        
+        //Вычисление давления на выходе (МПа)
+        let differential_pressure_pa = current_head * self.fluid.density_kg_m3() * GRAVITY_ACCEL;
+        let differential_pressure_mpa = differential_pressure_pa / MPA_TO_PA;
+        let outlet_pressure = self.current_pin_mpa + differential_pressure_mpa;
 
         PumpOperatingPoint {
+            inlet_pressure_mpa: self.current_pin_mpa,
             flow_rate_m3h: current_flow,
             head_m: current_head,
             shaft_power_kw,
@@ -357,6 +366,7 @@ impl Pump {
             npsh_required_m: npsh_required,
             inlet_velocity_ms: inlet_velocity,
             outlet_velocity_ms: outlet_velocity,
+            outlet_pressure_mpa: outlet_pressure,
         }
     }
 }
@@ -427,6 +437,7 @@ mod tests {
         println!("\n>>> {}", test_name);
         println!("--------------------------------------------------------------");
         println!("Текущая скорость ротора      : {:.0} об/мин", op.rotation_speed_rpm);
+        println!("Давление на входе            : {:.2} МПа", op.inlet_pressure_mpa);
         println!("Фактическая подача (расход)  : {:.2} м³/ч", op.flow_rate_m3h);
         println!("Создаваемый напор            : {:.2} м", op.head_m);
         println!("Энергопотребление на валу    : {:.3} кВт", op.shaft_power_kw);
@@ -435,6 +446,7 @@ mod tests {
         println!("Требуемый NPSHr              : {:.2} м", op.npsh_required_m);
         println!("Скорость потока на входе     : {:.2} м/с", op.inlet_velocity_ms);
         println!("Скорость потока на выходе    : {:.2} м/с", op.outlet_velocity_ms);
+        println!("Давление на выходе           : {:.2} МПа", op.outlet_pressure_mpa);
         
         println!(
             "Аварийный статус кавитации   : {}",
